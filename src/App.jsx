@@ -176,8 +176,8 @@ function runFinancialModel(inputs) {
 
   // Warnings
   if (NPV < 0) warnings.push(`Project NPV is negative at ${r_disc}% discount rate.`);
-  if (DSCR_min !== null && DSCR_min < 1.0) warnings.push(`DSCR falls below 1.0× — loan default risk.`);
-  if (DSCR_min !== null && DSCR_min < 1.25 && DSCR_min >= 1.0) warnings.push(`DSCR below 1.25× — may not meet lender covenants.`);
+  if (DSCR_min !== null && DSCR_min < 1.0) warnings.push(`⚠ DSCR falls below 1.0× — loan default risk. Increase equity or reduce debt.`);
+  if (DSCR_min !== null && DSCR_min < 1.25 && DSCR_min >= 1.0) warnings.push(`⚠ DSCR below 1.25× — may not meet lender covenants.`);
 
   return {
     hours_yr, E_power_yr, E_therm_yr, F_tpy, CC_net,
@@ -265,7 +265,7 @@ function SliderInput({ label, value, onChange, min, max, step, unit = "", decima
   );
 }
 
-function MetricCard({ label, value, unit = "", prefix = "", status, decimals }) {
+function MetricCard({ label, value, unit = "", prefix = "", status, decimals, tip }) {
   const color = status === "ok" ? COLORS.accent : status === "warn" ? COLORS.amber : status === "error" ? COLORS.red : COLORS.white;
   let display;
   if (value == null || (typeof value === "number" && (isNaN(value) || !isFinite(value)))) {
@@ -279,9 +279,11 @@ function MetricCard({ label, value, unit = "", prefix = "", status, decimals }) 
     display = `${prefix}${value.toFixed(d)}`;
   }
   return (
-    <div style={{ background: COLORS.card, borderRadius: 6, border: `1px solid ${COLORS.cardBorder}`,
+    <div title={tip} style={{ background: COLORS.card, borderRadius: 6, border: `1px solid ${COLORS.cardBorder}`,
       padding: "8px 10px", textAlign: "center" }}>
-      <div style={{ fontSize: 9, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 9, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+        {label} {tip && <span style={{ cursor: "help", opacity: 0.5 }}>ⓘ</span>}
+      </div>
       <div style={{ fontSize: 20, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>{display}</div>
       {unit && <div style={{ fontSize: 9, color: COLORS.textDim, marginTop: 2 }}>{unit}</div>}
     </div>
@@ -462,10 +464,10 @@ export default function BioCHPFinancialApp() {
           </Accordion>
 
           <Accordion title="OPEX" icon="⟳">
-            <SliderInput label="Maintenance Rate" value={inputs.R_maint} onChange={set("R_maint")} min={0.01} max={0.06} step={0.005} unit="$/kWhe" decimals={3} prefix="$" />
+            <SliderInput label="Maintenance Rate" value={inputs.R_maint} onChange={set("R_maint")} min={0.01} max={0.06} step={0.005} unit="$/kWh" decimals={3} prefix="$" />
             <SliderInput label="EnexFuel Processing" value={inputs.C_fuel_process} onChange={set("C_fuel_process")} min={20} max={150} step={5} unit="$/ton" decimals={0} prefix="$" />
             <SliderInput label="Insurance" value={inputs.C_insurance} onChange={set("C_insurance")} min={500} max={10000} step={250} unit="/yr" decimals={0} prefix="$" />
-            <SliderInput label="Account Mgmt" value={inputs.C_acct_mgmt} onChange={set("C_acct_mgmt")} min={1000} max={10000} step={250} unit="/yr" decimals={0} prefix="$" />
+            <SliderInput label="Account Management" value={inputs.C_acct_mgmt} onChange={set("C_acct_mgmt")} min={1000} max={10000} step={250} unit="/yr" decimals={0} prefix="$" />
           </Accordion>
 
           <Accordion title="Financing" icon="◈">
@@ -490,20 +492,26 @@ export default function BioCHPFinancialApp() {
           {/* Metric Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 16 }}>
             <MetricCard label="NPV" value={results.NPV} prefix="$"
-              status={results.NPV > 0 ? "ok" : "error"} />
+              status={results.NPV > 0 ? "ok" : "error"}
+              tip="Net Present Value — sum of all discounted cash flows. Positive = project creates value above hurdle rate." />
             <MetricCard label="IRR" value={results.IRR !== null ? results.IRR * 100 : null} unit="%"
-              status={results.IRR !== null ? (results.IRR * 100 > inputs.r_disc ? "ok" : results.IRR > 0 ? "warn" : "error") : undefined} />
+              status={results.IRR !== null ? (results.IRR * 100 > inputs.r_disc ? "ok" : results.IRR > 0 ? "warn" : "error") : undefined}
+              tip="Internal Rate of Return — annualized equity return. Green when above discount rate." />
             <MetricCard label="Payback" value={results.payback_disc || "> " + inputs.T_project} unit={results.payback_disc ? "yrs" : ""}
-              status={results.payback_disc ? (results.payback_disc < 4 ? "ok" : results.payback_disc < 7 ? "warn" : "error") : "error"} />
-            <MetricCard label="Rev/Unit" value={results.R_per_unit} prefix="$" unit="/yr" />
+              status={results.payback_disc ? (results.payback_disc < 4 ? "ok" : results.payback_disc < 7 ? "warn" : "error") : "error"}
+              tip="Discounted Payback — years until cumulative discounted cash flow turns positive." />
+            <MetricCard label="Rev/Unit" value={results.R_per_unit} prefix="$" unit="/yr"
+              tip="Year 1 total revenue per active BioCHP unit across all four streams." />
             <MetricCard label="DSCR" value={results.DSCR_min} unit="×" decimals={2}
-              status={results.DSCR_min !== null ? (results.DSCR_min >= 1.25 ? "ok" : results.DSCR_min >= 1.0 ? "warn" : "error") : undefined} />
+              status={results.DSCR_min !== null ? (results.DSCR_min >= 1.25 ? "ok" : results.DSCR_min >= 1.0 ? "warn" : "error") : undefined}
+              tip="Debt Service Coverage Ratio — EBITDA ÷ annual debt payment. Lenders require ≥ 1.25×." />
             <MetricCard label="Cust. Savings" value={results.savings_pct} unit="%" decimals={1}
-              status={results.savings_pct > 15 ? "ok" : results.savings_pct > 0 ? "warn" : "error"} />
+              status={results.savings_pct > 15 ? "ok" : results.savings_pct > 0 ? "warn" : "error"}
+              tip="Customer cost reduction vs current power + thermal + waste disposal costs." />
           </div>
 
           {/* Diagnostics */}
-          {results.warnings.map((w, i) => <DiagnosticHint key={i} text={w} color={w.includes("negative") || w.includes("default") ? "red" : "amber"} />)}
+          {results.warnings.map((w, i) => <DiagnosticHint key={i} text={w} color={w.includes("negative") || w.includes("default risk") ? "red" : "amber"} />)}
 
           {/* Revenue Waterfall */}
           <div style={{ background: COLORS.card, borderRadius: 8, border: `1px solid ${COLORS.cardBorder}`, padding: 16, marginBottom: 12 }}>
@@ -694,14 +702,14 @@ export default function BioCHPFinancialApp() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${COLORS.panelBorder}` }}>
-                    {["Yr", "Units", "Rev", "OPEX", "CF"].map(h => (
+                    {["Year", "Units", "Rev", "OPEX", "Cash Flow"].map(h => (
                       <th key={h} style={{ padding: "3px 4px", color: COLORS.textDim, fontWeight: 600, textAlign: "right", fontSize: 9 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {results.years.map((yr, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${COLORS.bg}` }}>
+                    <tr key={i} style={{ borderBottom: `1px solid ${COLORS.bg}`, background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
                       <td style={{ padding: "2px 4px", color: COLORS.textMuted, textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{yr.year}</td>
                       <td style={{ padding: "2px 4px", color: COLORS.textMuted, textAlign: "right" }}>{yr.N_deployed}</td>
                       <td style={{ padding: "2px 4px", color: COLORS.accent, textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>
